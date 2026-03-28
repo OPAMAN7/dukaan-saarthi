@@ -1,11 +1,13 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",    subtitle: "Overview of your shop today" },
   "/inventory":   { title: "Inventory",    subtitle: "Manage products and stock levels" },
+  "/add-sale":    { title: "Add Sale",     subtitle: "Record sales and update revenue" },
   "/insights":    { title: "AI Insights",  subtitle: "Smart recommendations to boost profit" },
   "/add-product": { title: "Add Product",  subtitle: "Add new items to your inventory" },
   "/settings":    { title: "Settings",     subtitle: "Configure your shop preferences" },
@@ -15,6 +17,49 @@ export default function TopBar() {
   const pathname = usePathname();
   const meta = pageMeta[pathname] ?? { title: "Dukaan Bright", subtitle: "" };
   const [focused, setFocused] = useState(false);
+  const [ownerName, setOwnerName] = useState("Shop Owner");
+  const [initials, setInitials] = useState("SO");
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData.user;
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from("users")
+          .select("full_name")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const name =
+          profile?.full_name ||
+          (user.user_metadata?.full_name as string | undefined) ||
+          user.email ||
+          "Shop Owner";
+
+        setOwnerName(name);
+
+        const parts = name
+          .split(" ")
+          .filter((part: string) => Boolean(part))
+          .slice(0, 2);
+        const inits =
+          parts.length === 0
+            ? "SO"
+            : parts
+                .map((p: string) => p[0]?.toUpperCase() ?? "")
+                .join("") || "SO";
+        setInitials(inits);
+      } catch (e) {
+        console.error("Failed to load owner profile for TopBar:", e);
+      }
+    };
+
+    void loadProfile();
+  }, []);
 
   return (
     <header className="flex justify-between items-center w-full px-8 h-16 sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
@@ -51,11 +96,11 @@ export default function TopBar() {
           className="flex items-center gap-2.5 pl-3 ml-1 border-l border-gray-100 hover:opacity-80 transition-opacity"
         >
           <div className="text-right hidden sm:block">
-            <p className="text-xs font-extrabold text-on-surface tracking-tight">Rajesh Kumar</p>
+            <p className="text-xs font-extrabold text-on-surface tracking-tight">{ownerName}</p>
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Shop Owner</p>
           </div>
           <div className="w-9 h-9 rounded-full cta-gradient flex items-center justify-center text-white text-xs font-extrabold shadow-card">
-            RK
+            {initials}
           </div>
         </Link>
       </div>

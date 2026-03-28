@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 const categories = [
   "Grains & Flour", "Dairy", "Instant Food", "Beverages",
@@ -15,6 +16,8 @@ export default function AddProductPage() {
   });
   const [saved, setSaved] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -28,10 +31,87 @@ export default function AddProductPage() {
     }, 1500);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getStockStatus = (quantity: number, minQuantity: number) => {
+    if (quantity <= Math.max(1, Math.floor(minQuantity / 2))) return "critical";
+    if (quantity <= minQuantity) return "low";
+    return "healthy";
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => router.push("/inventory"), 1200);
+    setErrorMsg("");
+    setSubmitting(true);
+
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      if (!user) {
+        router.push("/login?error=auth_required");
+        return;
+      }
+
+      const { data: shop } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("owner_user_id", user.id)
+        .order("created_at", { ascending: true })
+        .maybeSingle();
+      if (!shop) {
+        setErrorMsg("Shop setup not found. Please complete onboarding first.");
+        return;
+      }
+
+      // Find/create product category for this shop.
+      let categoryId: string | null = null;
+      if (form.category) {
+        const { data: existingCategory } = await supabase
+          .from("product_categories")
+          .select("id")
+          .eq("shop_id", shop.id)
+          .eq("name", form.category)
+          .maybeSingle();
+
+        if (existingCategory?.id) {
+          categoryId = existingCategory.id;
+        } else {
+          const { data: createdCategory, error: categoryError } = await supabase
+            .from("product_categories")
+            .insert({ shop_id: shop.id, name: form.category })
+            .select("id")
+            .single();
+          if (categoryError) throw categoryError;
+          categoryId = createdCategory.id;
+        }
+      }
+
+      const quantity = Number(form.quantity || 0);
+      const minQuantity = Number(form.minQuantity || 0);
+      const stockStatus = getStockStatus(quantity, minQuantity);
+
+      const { error } = await supabase.from("products").insert({
+        shop_id: shop.id,
+        name: form.name,
+        category_id: categoryId,
+        barcode: form.barcode || null,
+        quantity,
+        min_quantity: minQuantity,
+        cost_price: Number(form.costPrice || 0),
+        selling_price: Number(form.sellingPrice || 0),
+        expiry_date: form.expiryDate || null,
+        status: stockStatus,
+      });
+
+      if (error) throw error;
+
+      setSaved(true);
+      setTimeout(() => router.push("/inventory"), 800);
+    } catch (error) {
+      console.error("Failed to add product:", error);
+      setErrorMsg("Could not save product. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const profit = form.costPrice && form.sellingPrice
@@ -67,6 +147,11 @@ export default function AddProductPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-surface-container-lowest rounded-xl p-7 shadow-card space-y-6">
+        {errorMsg && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {errorMsg}
+          </div>
+        )}
         {/* Row 1: Name + Category */}
         <div className="grid grid-cols-2 gap-5">
           <div>
@@ -160,11 +245,12 @@ export default function AddProductPage() {
         <div className="flex gap-4 pt-2">
           <button
             type="submit"
+            disabled={submitting}
             className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-card ${
               saved ? "bg-emerald-500 text-white" : "cta-gradient text-white hover:opacity-90"
             }`}
           >
-            {saved ? "✓ Product Added! Redirecting…" : "Add to Inventory"}
+            {saved ? "✓ Product Added! Redirecting…" : submitting ? "Saving..." : "Add to Inventory"}
           </button>
           <button
             type="button"

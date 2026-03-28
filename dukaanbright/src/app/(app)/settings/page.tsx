@@ -1,11 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mockExpenses } from "@/lib/mockData";
 import { formatCurrency } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import type { Expense } from "@/types";
 
 export default function SettingsPage() {
-  const [expenses, setExpenses] = useState(mockExpenses);
-  const [shopName, setShopName] = useState("Rajesh General Store");
+  const [expenses, setExpenses] = useState<Expense[]>(mockExpenses);
+  const [shopName, setShopName] = useState("Your Shop");
+  const [ownerName, setOwnerName] = useState("Shop Owner");
   const [language, setLanguage] = useState("English");
   const [notifications, setNotifications] = useState({ expiry: true, lowStock: true, aiTips: true });
   const [saved, setSaved] = useState(false);
@@ -16,9 +19,131 @@ export default function SettingsPage() {
     setExpenses(expenses.map((e) => e.id === id ? { ...e, amount } : e));
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData.user;
+        if (!user) return;
+
+        const [{ data: profile }, { data: shop }] = await Promise.all([
+          supabase.from("users").select("full_name").eq("id", user.id).maybeSingle(),
+          supabase
+            .from("shops")
+            .select("id, name, language")
+            .eq("owner_user_id", user.id)
+            .order("created_at", { ascending: true })
+            .maybeSingle(),
+        ]);
+
+        const resolvedOwner =
+          profile?.full_name ||
+          (user.user_metadata?.full_name as string | undefined) ||
+          user.email ||
+          "Shop Owner";
+        setOwnerName(resolvedOwner);
+
+        if (!shop) return;
+
+        setShopName(shop.name ?? "Your Shop");
+        setLanguage(shop.language ?? "English");
+
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        const month = monthStart.toISOString().slice(0, 10);
+
+        const [{ data: categories }, { data: monthly }] = await Promise.all([
+          supabase.from("expense_categories").select("id, code, label, icon"),
+          supabase
+            .from("shop_monthly_expenses")
+            .select("category_id, amount, month")
+            .eq("shop_id", shop.id)
+            .eq("month", month),
+        ]);
+
+        if (!categories) return;
+
+        const amountByCategoryId = new Map(
+          (monthly ?? []).map((m: any) => [m.category_id, Number(m.amount ?? 0)])
+        );
+
+        const updatedExpenses: Expense[] = categories.map((c: any) => {
+          const base =
+            mockExpenses.find((e) => e.label === c.label) ??
+            ({
+              id: c.code,
+              label: c.label,
+              amount: 0,
+              icon: c.icon ?? "payments",
+            } as Expense);
+
+          const amount = amountByCategoryId.get(c.id) ?? base.amount ?? 0;
+          return { ...base, amount };
+        });
+
+        setExpenses(updatedExpenses);
+      } catch (e) {
+        console.error("Failed to load settings from Supabase:", e);
+      }
+    };
+
+    void loadSettings();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      if (!user) return;
+
+      const { data: shop, error: shopSelectError } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("owner_user_id", user.id)
+        .maybeSingle();
+      if (shopSelectError || !shop) return;
+
+      await supabase
+        .from("shops")
+        .update({ name: shopName, language })
+        .eq("id", shop.id);
+
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      const month = monthStart.toISOString().slice(0, 10);
+
+      const { data: categories } = await supabase
+        .from("expense_categories")
+        .select("id, label");
+
+      const byLabel = new Map((categories ?? []).map((c: any) => [c.label, c.id]));
+
+      const upserts = expenses
+        .map((e) => {
+          const categoryId = byLabel.get(e.label);
+          if (!categoryId) return null;
+          return {
+            shop_id: shop.id,
+            category_id: categoryId,
+            month,
+            amount: e.amount,
+          };
+        })
+        .filter(Boolean);
+
+      if (upserts.length > 0) {
+        await supabase
+          .from("shop_monthly_expenses")
+          .upsert(upserts as any, { onConflict: "shop_id,category_id,month" });
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error("Failed to save settings:", e);
+    }
   };
 
   return (
@@ -54,7 +179,8 @@ export default function SettingsPage() {
         <div>
           <label className="text-xs font-extrabold uppercase tracking-wider text-on-surface-variant block mb-2">Owner Name</label>
           <input
-            defaultValue="Rajesh Kumar"
+            value={ownerName}
+            onChange={(e) => setOwnerName(e.target.value)}
             className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary-container/30 transition-all max-w-xs"
           />
         </div>

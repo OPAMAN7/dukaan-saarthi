@@ -1,19 +1,82 @@
 "use client";
-import { useState } from "react";
-import { mockProducts } from "@/lib/mockData";
+import { useEffect, useMemo, useState } from "react";
 import { formatCurrency, getStockStatusColor, getStockDotColor } from "@/lib/utils";
 import { Product } from "@/types";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
-const categories = ["All", "Grains & Flour", "Dairy", "Instant Food", "Beverages", "Personal Care", "Oils & Ghee", "Tea & Coffee"];
 const statusFilters = ["All", "healthy", "low", "critical"];
 
 export default function InventoryPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const filtered = mockProducts.filter((p: Product) => {
+  useEffect(() => {
+    const loadInventory = async () => {
+      try {
+        setLoading(true);
+        const supabase = createClient();
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData.user;
+        if (!user) return;
+
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id")
+          .eq("owner_user_id", user.id)
+          .order("created_at", { ascending: true })
+          .maybeSingle();
+        if (!shop) return;
+
+        const { data: rows } = await supabase
+          .from("products")
+          .select(
+            "id, name, quantity, min_quantity, cost_price, selling_price, expiry_date, status, product_categories(name)"
+          )
+          .eq("shop_id", shop.id)
+          .order("created_at", { ascending: false });
+
+        const mapped: Product[] = (rows ?? []).map((p: any) => {
+          const expiryDate = p.expiry_date ?? undefined;
+          const daysToExpiry = expiryDate
+            ? Math.ceil((new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            : undefined;
+
+          return {
+            id: String(p.id),
+            name: p.name ?? "Unnamed Product",
+            category: p.product_categories?.name ?? "General",
+            quantity: Number(p.quantity ?? 0),
+            minQuantity: Number(p.min_quantity ?? 0),
+            costPrice: Number(p.cost_price ?? 0),
+            sellingPrice: Number(p.selling_price ?? 0),
+            expiryDate,
+            stockStatus: (p.status as Product["stockStatus"]) ?? "healthy",
+            daysToExpiry,
+            trend: "stable",
+          };
+        });
+
+        setProducts(mapped);
+      } catch (e) {
+        console.error("Failed to load inventory from Supabase:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadInventory();
+  }, []);
+
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(products.map((p) => p.category))).sort()],
+    [products]
+  );
+
+  const filtered = products.filter((p: Product) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchCat = category === "All" || p.category === category;
     const matchStatus = statusFilter === "All" || p.stockStatus === statusFilter;
@@ -27,16 +90,25 @@ export default function InventoryPage() {
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-on-surface">Inventory</h1>
           <p className="text-on-surface-variant mt-1 font-medium">
-            {filtered.length} products · {mockProducts.filter(p => p.stockStatus !== "healthy").length} need attention
+            {filtered.length} products · {products.filter((p) => p.stockStatus !== "healthy").length} need attention
           </p>
         </div>
-        <Link
-          href="/add-product"
-          className="flex items-center gap-2 px-6 py-3 cta-gradient text-white rounded-xl font-bold text-sm shadow-card hover:opacity-90 active:scale-95 transition-all"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Add Product
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/add-sale"
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-card hover:opacity-90 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[18px]">point_of_sale</span>
+            Add Sale
+          </Link>
+          <Link
+            href="/add-product"
+            className="flex items-center gap-2 px-6 py-3 cta-gradient text-white rounded-xl font-bold text-sm shadow-card hover:opacity-90 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Add Product
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -76,6 +148,11 @@ export default function InventoryPage() {
 
       {/* Table */}
       <div className="bg-surface-container-lowest rounded-xl shadow-card overflow-hidden">
+        {loading && (
+          <p className="px-6 py-4 text-sm font-medium text-on-surface-variant">
+            Loading inventory...
+          </p>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
