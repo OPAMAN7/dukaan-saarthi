@@ -20,6 +20,7 @@ export default function LoginPage() {
 
     if (error) {
       console.error("Google sign-in failed:", error.message);
+      setError(error.message);
       setGoogleLoading(false);
     }
   };
@@ -113,45 +114,12 @@ export default function LoginPage() {
             {googleLoading ? "Redirecting..." : "Continue with Google"}
           </button>
 
-          <div className="relative flex items-center">
-            <div className="flex-1 border-t border-outline-variant"></div>
-            <span className="px-4 text-xs font-bold text-on-surface-variant bg-surface">or</span>
-            <div className="flex-1 border-t border-outline-variant"></div>
-          </div>
-
-          {/* Email form */}
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1.5">
-                Phone / Email
-              </label>
-              <input
-                type="text"
-                placeholder="9876543210 or you@email.com"
-                className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary-container/30 placeholder:text-slate-400 transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary-container/30 placeholder:text-slate-400 transition-all"
-              />
-            </div>
-            <Link
-              href="/dashboard"
-              className="w-full block text-center cta-gradient text-white font-bold py-3.5 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all shadow-card"
-            >
-              Sign In
-            </Link>
-          </div>
+          <p className="text-sm font-medium text-on-surface-variant text-center">
+            Sign in with Google only. Email and phone login are disabled.
+          </p>
 
           <p className="text-xs text-center text-on-surface-variant font-medium">
-            New to Dukaan Bright?{" "}
-            <Link href="/register" className="text-primary-container font-bold hover:underline">Create account</Link>
+            New to Dukaan Bright? <Link href="/register" className="text-primary-container font-bold hover:underline">Create account</Link>
           </p>
         </div>
       </section>

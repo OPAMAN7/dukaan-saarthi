@@ -69,7 +69,7 @@ export default function SettingsPage() {
 
         const [{ data: categories }, { data: monthly }] = await Promise.all([
           // `expense_categories` might not have an `icon` column. Keep this query minimal.
-          supabase.from("expense_categories").select("id, code, label"),
+          supabase.from("expense_categories").select("id, category_code as code, label"),
           supabase
             .from("shop_monthly_expenses")
             .select("category_id, amount, month")

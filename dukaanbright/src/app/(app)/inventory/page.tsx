@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatCurrency, getStockStatusColor, getStockDotColor } from "@/lib/utils";
 import { Product } from "@/types";
 import Link from "next/link";
@@ -8,13 +9,17 @@ import { createClient } from "@/lib/supabase/client";
 const statusFilters = ["All", "healthy", "low", "critical"];
 
 export default function InventoryPage() {
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [category, setCategory] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
   useEffect(() => {
+    const query = searchParams.get("search") ?? "";
+    setSearch(query);
+
     const loadInventory = async () => {
       try {
         setLoading(true);

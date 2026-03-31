@@ -51,3 +51,40 @@ export interface ChartDataPoint {
   revenue: number;
   profit: number;
 }
+
+// ── Finances ──────────────────────────────────────────────────────────────────
+
+export type BillStatus = "paid" | "unpaid" | "overdue";
+export type BillCategory = "rent" | "electricity" | "salaries" | "supplies" | "internet" | "maintenance" | "other";
+export type TxType = "income" | "expense";
+
+export interface Bill {
+  id: string;
+  label: string;
+  category: BillCategory;
+  amount: number;
+  dueDate: string;         // "YYYY-MM-DD"
+  status: BillStatus;
+  icon: string;
+  recurring: boolean;
+  paidDate?: string;
+}
+
+export interface SaleTransaction {
+  id: string;
+  date: string;            // "YYYY-MM-DD"
+  productName: string;
+  category: string;
+  qty: number;
+  unitPrice: number;
+  totalRevenue: number;
+  totalCost: number;
+  profit: number;
+}
+
+export interface MonthlySummary {
+  month: string;           // "Jan", "Feb" …
+  revenue: number;
+  expenses: number;
+  profit: number;
+}

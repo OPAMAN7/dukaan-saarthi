@@ -1,5 +1,5 @@
 "use client";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -10,17 +10,27 @@ const pageMeta: Record<string, { title: string; subtitle: string }> = {
   "/add-sale":    { title: "Add Sale",     subtitle: "Record sales and update revenue" },
   "/insights":    { title: "AI Insights",  subtitle: "Smart recommendations to boost profit" },
   "/add-product": { title: "Add Product",  subtitle: "Add new items to your inventory" },
+  "/finances":    { title: "Finances",    subtitle: "Bills, sales ledger & cash flow" },
   "/settings":    { title: "Settings",     subtitle: "Configure your shop preferences" },
 };
 
 export default function TopBar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const meta = pageMeta[pathname] ?? { title: "Dukaan Bright", subtitle: "" };
   const [focused, setFocused] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [ownerName, setOwnerName] = useState("Shop Owner");
   const [initials, setInitials] = useState("SO");
 
   useEffect(() => {
+    if (pathname === "/inventory") {
+      setSearchQuery(searchParams.get("search") ?? "");
+    } else {
+      setSearchQuery("");
+    }
+
     const loadProfile = async () => {
       const supabase = createClient();
 
@@ -93,6 +103,19 @@ export default function TopBar() {
           <input
             className="bg-transparent border-none outline-none text-sm w-full font-medium placeholder:text-slate-400"
             placeholder="Search products..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const query = searchQuery.trim();
+                if (query) {
+                  router.push(`/inventory?search=${encodeURIComponent(query)}`);
+                } else if (pathname === "/inventory") {
+                  router.push("/inventory");
+                }
+              }
+            }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
           />
